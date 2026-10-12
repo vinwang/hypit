@@ -1,0 +1,4 @@
+interface:
+  display_name: "素材驱动混剪"
+  short_description: "用项目内配方（recipe.json）固定画布、时间线、锁定资产与混音，换素材或换条数只改选段计划"
+  default_prompt: "使用 $footage-led-montage 批量制作素材驱动混剪。固定项一律从 projects/<项目>/recipe.json 读取，不要重新口述画布、时间线、锁定资产、混音和重复度策略；我只需要指定素材品类、条数和要用的镜头。按确认文案、最终配音实际时长和逐条 QA 证据出片。"

@@ -1,0 +1,277 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "footage-led-montage/recipe.schema.json",
+  "title": "Footage-led montage recipe",
+  "description": "A reusable production recipe. It holds what stays fixed across a batch (canvas, timeline, categories, locked assets, mix and batch policy). Per-batch shot selection lives in the batch plan referenced by paths.plan, not here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "id", "canvas", "timeline", "categories", "asset_roots", "locked", "audio_mix", "batch", "paths"],
+  "properties": {
+    "version": {"const": "1.0"},
+    "id": {
+      "type": "string",
+      "description": "Recipe identity, e.g. corn-reference-v16. Changing any locked value requires a new id plus a decision_log entry."
+    },
+    "supersedes": {"type": ["string", "null"]},
+    "runner_sha256": {
+      "type": ["string", "null"],
+      "pattern": "^([0-9a-f]{64})?$",
+      "description": "SHA-256 of tools/render.cjs approved for this recipe. The runner refuses to run when it differs; null means the lock is not yet established."
+    },
+    "fixed_visual_profile_id": {"type": "string"},
+    "locked_assets_id": {"type": "string"},
+
+    "canvas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "fps"],
+      "properties": {
+        "width": {"type": "integer", "exclusiveMinimum": 0},
+        "height": {"type": "integer", "exclusiveMinimum": 0},
+        "fps": {"type": "integer", "exclusiveMinimum": 0}
+      }
+    },
+
+    "timeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["body_frames", "tail_frames", "crossfade_frames"],
+      "properties": {
+        "body_frames": {"type": "integer", "exclusiveMinimum": 0},
+        "tail_frames": {"type": "integer", "minimum": 0},
+        "crossfade_frames": {"type": "integer", "minimum": 0}
+      }
+    },
+
+    "categories": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product_category", "source_categories", "asset_category"],
+      "properties": {
+        "product_category": {
+          "type": "string",
+          "description": "The delivered product category written into timelines, e.g. 东北糯玉米."
+        },
+        "source_categories": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string"},
+          "description": "Source footage categories a shot may come from. Every shot's category must be listed here."
+        },
+        "excluded_categories": {"type": "array", "items": {"type": "string"}},
+        "asset_category": {
+          "type": "string",
+          "description": "Shared asset bucket for music and narration, resolved explicitly rather than inferred from the product name."
+        }
+      }
+    },
+
+    "asset_roots": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_root", "videos"],
+      "properties": {
+        "source_root": {
+          "type": "string",
+          "description": "External footage library the shots are imported from, e.g. /Users/wl/www/open-montage/resource/videos. Shots are snapshotted into videos/<category>/ by content hash before use."
+        },
+        "videos": {"type": "string"},
+        "music": {"type": "string"},
+        "audio": {"type": "string"}
+      }
+    },
+
+    "locked": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["narration", "music_bed", "tail", "graphics"],
+      "properties": {
+        "narration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256", "text"],
+          "properties": {
+            "path": {"type": "string"},
+            "sha256": {"$ref": "#/definitions/sha256"},
+            "meta_path": {
+              "type": ["string", "null"],
+              "description": "Word-level timestamp sidecar. When present its joined words must equal text."
+            },
+            "text": {"type": "string"},
+            "start_seconds": {"type": "number", "minimum": 0}
+          }
+        },
+        "music_bed": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string"},
+            "sha256": {"$ref": "#/definitions/sha256"},
+            "reference_audio_path": {"type": ["string", "null"]},
+            "reference_audio_sha256": {"$ref": "#/definitions/sha256OrNull"}
+          }
+        },
+        "tail": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["video_path", "video_sha256"],
+          "properties": {
+            "video_path": {"type": "string"},
+            "video_sha256": {"$ref": "#/definitions/sha256"},
+            "audio_path": {"type": ["string", "null"]},
+            "audio_sha256": {"$ref": "#/definitions/sha256OrNull"},
+            "audio_interval_seconds": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {"type": "number"},
+              "description": "Interval taken from audio_path for the tail. Absent means the tail starts at body end."
+            }
+          }
+        },
+        "graphics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["body_overlay_path", "body_overlay_sha256", "tail_overlay_path", "tail_overlay_sha256"],
+          "properties": {
+            "body_overlay_path": {
+              "type": "string",
+              "description": "Alpha overlay covering the body, produced by tools/graphics/extract-overlay.py. Frame count must equal body_frames + tail_frames."
+            },
+            "body_overlay_sha256": {"$ref": "#/definitions/sha256"},
+            "tail_overlay_path": {"type": "string"},
+            "tail_overlay_sha256": {"$ref": "#/definitions/sha256"}
+          }
+        }
+      }
+    },
+
+    "audio_mix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["voice_gain_db", "limiter_limit", "render_path"],
+      "properties": {
+        "voice_gain_db": {
+          "type": "number",
+          "description": "Narration gain over the music bed. The runner converts it to a linear ffmpeg volume rounded to three decimals, so the approved 12 dB stays volume=3.981."
+        },
+        "limiter_limit": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "sample_rate": {"type": "integer", "enum": [44100, 48000]},
+        "bitrate": {"type": "string"},
+        "render_path": {
+          "type": "string",
+          "description": "Where the runner writes the one mixed audio track shared by every variant. An existing file at this path is reused as is, so a new mix needs a new path."
+        }
+      }
+    },
+
+    "batch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["variant_count", "shots_per_variant", "duplicate_policy"],
+      "properties": {
+        "variant_count": {"type": "integer", "exclusiveMinimum": 0},
+        "shots_per_variant": {"type": "integer", "exclusiveMinimum": 0},
+        "duplicate_policy": {
+          "type": "object",
+          "required": ["max_pairwise_ratio", "comparison_region"],
+          "properties": {
+            "max_pairwise_ratio": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+            "denominator": {"type": "string"},
+            "comparison_method": {"type": "string"},
+            "reuse_unit": {"type": "string"},
+            "excluded_layers": {"type": "array", "items": {"type": "string"}},
+            "comparison_region": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["width", "height", "x", "y"],
+              "description": "Picture region compared for visual duplication, in output pixels. It must exclude the layers named in excluded_layers, whose pixels are identical in every variant by construction and would otherwise mask real duplication.",
+              "properties": {
+                "width": {"type": "integer", "exclusiveMinimum": 0},
+                "height": {"type": "integer", "exclusiveMinimum": 0},
+                "x": {"type": "integer", "minimum": 0},
+                "y": {"type": "integer", "minimum": 0}
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "snapshot_prefix": {
+      "type": "string",
+      "description": "Filename prefix for content-hash snapshots written into videos/<category>/."
+    },
+
+    "manifest_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Bookkeeping written into the shared asset manifest. It does not affect a rendered frame.",
+      "properties": {
+        "variant_set_suffix": {"type": "string"},
+        "source_material_rule": {"type": "string"},
+        "shared_audio_key": {
+          "type": "string",
+          "description": "Manifest item key under which the mixed audio is locked. The runner refuses to run when that entry exists with a different hash."
+        }
+      }
+    },
+
+    "output_naming": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeline_prefix": {"type": "string"},
+        "qa_suffix": {"type": "string"},
+        "body_filename": {
+          "type": "string",
+          "description": "Intermediate body filename inside work/<variant_id>/. Kept configurable so an existing revision's cached body is still recognised after a runner change."
+        },
+        "reuse_timeline_prefix": {
+          "type": ["string", "null"],
+          "description": "Earlier revision's timeline prefix. When a shot's source identity and framing are unchanged there, its rendered body is reused instead of re-rendered."
+        },
+        "reuse_body_filename": {"type": ["string", "null"]}
+      }
+    },
+
+    "paths": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan", "work"],
+      "properties": {
+        "plan": {
+          "type": "string",
+          "description": "Batch plan holding variants[].shots, relative to the recipe's project root."
+        },
+        "script": {"type": ["string", "null"]},
+        "manifest": {"type": ["string", "null"]},
+        "work": {"type": "string"},
+        "reports": {"type": "string"},
+        "qa": {"type": "string"}
+      }
+    },
+
+    "decision_log": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["date", "subject"],
+        "properties": {
+          "date": {"type": "string"},
+          "subject": {"type": "string"},
+          "from": {"type": ["string", "null"]},
+          "to": {"type": ["string", "null"]},
+          "user_instruction": {"type": "string"},
+          "decision": {"type": "string"}
+        }
+      }
+    }
+  },
+
+  "definitions": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "sha256OrNull": {"type": ["string", "null"], "pattern": "^([0-9a-f]{64})?$"}
+  }
+}
